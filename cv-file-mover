@@ -1,0 +1,73 @@
+import os
+import datetime
+import shutil
+import logging
+
+# Setting up the logger
+FORMAT = '%(asctime)-15s %(message)s'
+formatting = logging.Formatter(FORMAT)
+logging.basicConfig(format=FORMAT)
+logger = logging.getLogger('cv')
+logger.setLevel(logging.INFO)
+handler = logging.FileHandler('cv.log')
+handler.setLevel(logging.INFO)
+handler.setFormatter(formatting)
+logger.addHandler(handler)
+
+
+def copy_cv_files_from_prod_to_preprod(last_n_days=7):
+    original_file_path = r"\\Original\File\Location"
+    destination_file_path = r'\\Destinaton\File\Location'
+
+    # Changes the working directory of the python script
+    os.chdir(original_file_path)
+
+    # Creates a list of all files in origin folder
+    items = os.listdir(original_file_path)
+
+    # Creates new empty list for cv files
+    cvlist = []
+
+    # Goes through each file in items list and appends each one that ends in .SC9 to new cvlist
+    logger.info('Collecting all Calorific Values files inside of GT Prod')
+    for filename in items:
+        if filename.endswith(".SC9"):
+            cvlist.append(filename)
+
+    for cv in cvlist:
+        logger.info(f'Processing {cv}')
+        # gets last modified date of each CV file and also today's date and time
+        modified_date_time = datetime.datetime.fromtimestamp(os.path.getmtime(cv))
+        todays_date = datetime.datetime.today()
+        time_delta = modified_date_time + datetime.timedelta(days=last_n_days)
+
+        # if the file was modified within the last 7 days, move to destination folder
+        if time_delta > todays_date:
+            logger.info(f'Copying {cv} - {modified_date_time}')
+            shutil.copy2(cv, destination_file_path)
+        else:
+            logger.info(f'{cv} - ignoring - old file')
+
+
+# if we run this file directly
+if __name__ == '__main__':
+    copy_cv_files_from_prod_to_preprod(last_n_days=7)
+
+# Sending message to slack to let users know the process worked
+def send_message_to_slack(text):
+    from urllib import request, parse
+    import json
+
+    post = {"text": "{0}".format(text)}
+
+    try:
+        json_data = json.dumps(post)
+        req = request.Request("https://hooks.slack.com/services/",
+                              data=json_data.encode('ascii'),
+                              headers={'Content-Type': 'application/json'})
+        resp = request.urlopen(req)
+    except Exception as em:
+        print("EXCEPTION: " + str(em))
+
+
+send_message_to_slack('Latest calorific values copied to preprod successfully.')
